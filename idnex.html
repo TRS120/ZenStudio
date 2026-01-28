@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High Fidelity Media Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .range-slider {
+            position: relative;
+            width: 100%;
+            height: 10px;
+            background: #444;
+            border-radius: 5px;
+        }
+        .slider-handle {
+            position: absolute;
+            top: -5px;
+            width: 20px;
+            height: 20px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 2;
+        }
+        #slider-range {
+            position: absolute;
+            height: 100%;
+            background: #3b82f6;
+            opacity: 0.3;
+            z-index: 1;
+        }
+        input[type=range].seek-bar {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range].seek-bar::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #374151;
+            border-radius: 3px;
+        }
+        input[type=range].seek-bar::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -5px;
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            background: #0d1117;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+            cursor: crosshair;
+        }
+        .drag-over-active {
+            border-color: #3b82f6 !important;
+            background-color: rgba(59, 130, 246, 0.15) !important;
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.3);
+            transform: scale(1.01);
+        }
+        .btn-loading {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body id="drop-zone" class="bg-gray-950 text-gray-100 min-h-screen flex flex-col items-center p-4 md:p-6 transition-all duration-300">
+
+    <div class="max-w-7xl w-full space-y-4">
+        <header class="flex justify-between items-end border-b border-gray-800 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-400">High Fidelity Studio <span class="text-purple-400 text-sm font-medium ml-2">Mastering Engine</span></h1>
+                <p class="text-xs text-gray-500 uppercase tracking-widest mt-1">Lossless Media Processor</p>
+            </div>
+            <div id="media-type-badge" class="bg-gray-800 px-3 py-1 rounded border border-gray-700 text-[10px] text-gray-400 font-bold uppercase max-w-[200px] truncate">
+                Idle
+            </div>
+        </header>
+
+        <!-- Upload Section -->
+        <div id="upload-area" class="border-2 border-dashed border-gray-800 rounded-2xl p-24 text-center hover:border-blue-500/50 transition-all cursor-pointer bg-gray-900/40">
+            <input type="file" id="media-upload" accept="video/*, audio/*" class="hidden">
+            <label for="media-upload" class="cursor-pointer block">
+                <div class="text-7xl mb-6">💎</div>
+                <p class="text-2xl font-semibold text-gray-300">Drop your master files here</p>
+                <p class="text-sm text-gray-500 mt-3 font-mono">MP4 • MOV • WAV • FLAC • MP3</p>
+            </label>
+        </div>
+
+        <!-- Editor Workspace -->
+        <div id="editor-ui" class="hidden">
+            <div class="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
+                
+                <!-- Main Preview Area -->
+                <div class="xl:col-span-3 space-y-4">
+                    <div class="relative group bg-black rounded-xl overflow-hidden ring-1 ring-white/5 shadow-2xl">
+                        <canvas id="preview-canvas"></canvas>
+                        
+                        <!-- Overlay HUD -->
+                        <div class="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between backdrop-blur-[2px]">
+                             <button id="play-pause" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full font-bold transition shadow-xl active:scale-95">Play</button>
+                             <div class="flex flex-col items-end text-right">
+                                <span id="time-display" class="font-mono text-white text-lg font-medium">00:00 / 00:00</span>
+                                <span class="text-[9px] text-blue-400 uppercase tracking-tighter">Live Monitor</span>
+                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Timeline Controls -->
+                    <div class="space-y-4 bg-gray-900/50 p-5 rounded-2xl border border-gray-800">
+                        <div class="flex items-center gap-4">
+                            <span class="text-[10px] text-gray-500 font-mono">0.00s</span>
+                            <div class="flex-1">
+                                <input type="range" id="seek-bar" class="seek-bar" value="0" step="0.001">
+                            </div>
+                            <span id="duration-max-label" class="text-[10px] text-gray-500 font-mono">0.00s</span>
+                        </div>
+
+                        <div class="pt-4 border-t border-gray-800">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Trim Range</h3>
+                                <div class="flex gap-4">
+                                    <div class="text-right">
+                                        <p id="start-label" class="text-xs font-mono text-blue-400">0.000s</p>
+                                    </div>
+                                    <div class="text-right border-l border-gray-700 pl-4">
+                                        <p id="end-label" class="text-xs font-mono text-purple-400">0.000s</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="range-slider" id="trim-slider">
+                                <div id="slider-range"></div>
+                                <div id="handle-start" class="slider-handle"></div>
+                                <div id="handle-end" class="slider-handle"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Sidebar -->
+                <div class="xl:col-span-2 space-y-4 h-full flex flex-col justify-between">
+                    <div class="bg-gray-900 p-5 rounded-2xl shadow-xl space-y-5 border border-gray-800">
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-[10px] font-bold text-blue-400 uppercase">Gain Boost (200%)</h3>
+                                <span id="vol-label" class="text-[11px] font-mono text-gray-500">100%</span>
+                            </div>
+                            <input type="range" id="volume-slider" min="0" max="2" step="0.01" value="1" class="w-full accent-blue-500">
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-[10px] font-bold text-orange-400 uppercase">Time Scale</h3>
+                                <span id="speed-label" class="text-[11px] font-mono text-gray-500">1.0x</span>
+                            </div>
+                            <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1" class="w-full accent-orange-500">
+                        </div>
+
+                        <div class="space-y-3 pt-2 border-t border-gray-800">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-[10px] font-bold text-cyan-400 uppercase">AI Quality Upscaler</h3>
+                                <div class="flex items-center gap-2">
+                                    <span id="upscale-label" class="text-[11px] font-mono text-gray-500">OFF</span>
+                                    <input type="checkbox" id="upscale-toggle" class="w-4 h-4 accent-cyan-500">
+                                </div>
+                            </div>
+                            <p class="text-[9px] text-gray-600 italic">Neural edge sharpening and contrast enhancement.</p>
+                        </div>
+                    </div>
+
+                    <!-- Overlay Tool -->
+                    <div class="bg-gray-900 p-5 rounded-2xl shadow-xl border border-gray-800">
+                        <h3 class="text-[10px] font-bold text-purple-400 mb-4 uppercase">Text Overlays</h3>
+                        <input type="text" id="text-input" placeholder="Enter title text..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-purple-500/50 transition">
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="ai-caption-btn" class="bg-gray-800 hover:bg-gray-700 text-purple-300 text-[10px] py-2.5 rounded-lg font-bold border border-purple-500/20 transition uppercase tracking-tighter">AI Suggest</button>
+                            <button id="add-text-btn" class="bg-purple-600 hover:bg-purple-500 text-white text-[10px] py-2.5 rounded-lg font-bold transition uppercase">Apply</button>
+                        </div>
+                    </div>
+
+                    <!-- Mastering Export Config -->
+                    <div class="bg-blue-600/5 p-5 rounded-2xl shadow-xl space-y-4 border border-blue-500/20">
+                        <h3 class="text-[10px] font-bold text-green-400 uppercase tracking-widest">Mastering Export</h3>
+                        
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="space-y-1">
+                                    <p class="text-[9px] text-gray-500 uppercase font-bold">Profile</p>
+                                    <select id="export-quality" class="w-full bg-gray-800 text-[11px] p-2 rounded-lg border border-gray-700 outline-none">
+                                        <option value="lossless" selected>Lossless</option>
+                                        <option value="balanced">Balanced</option>
+                                        <option value="compressed">Small</option>
+                                    </select>
+                                </div>
+                                <div class="space-y-1">
+                                    <p class="text-[9px] text-gray-500 uppercase font-bold">Format</p>
+                                    <select id="export-format" class="w-full bg-gray-800 text-[11px] p-2 rounded-lg border border-gray-700 outline-none">
+                                        <option value="mp4">MP4</option>
+                                        <option value="webm">WebM</option>
+                                        <option value="flac">FLAC</option>
+                                        <option value="wav">WAV</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="export-btn" class="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-xl font-black shadow-lg transition transform active:scale-95 uppercase text-xs tracking-widest">
+                            Render Master
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Media Elements -->
+    <video id="source-video" class="hidden" crossorigin="anonymous" playsinline></video>
+    <audio id="source-audio" class="hidden" crossorigin="anonymous"></audio>
+
+    <script>
+        const apiKey = "";
+        const video = document.getElementById('source-video');
+        const audio = document.getElementById('source-audio');
+        let activeElement = video; 
+        
+        const canvas = document.getElementById('preview-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const editorUI = document.getElementById('editor-ui');
+        const uploadArea = document.getElementById('upload-area');
+        const dropZone = document.getElementById('drop-zone');
+        const playBtn = document.getElementById('play-pause');
+        const timeDisplay = document.getElementById('time-display');
+        const seekSlider = document.getElementById('seek-bar');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedLabel = document.getElementById('speed-label');
+        const volumeSlider = document.getElementById('volume-slider');
+        const upscaleToggle = document.getElementById('upscale-toggle');
+        const upscaleLabel = document.getElementById('upscale-label');
+        const textInput = document.getElementById('text-input');
+        const typeBadge = document.getElementById('media-type-badge');
+
+        let overlays = []; 
+        let startTime = 0;
+        let endTime = 0;
+        let isProcessing = false;
+        let mediaLoaded = false;
+        let animationFrameId = null;
+
+        // Audio Context and separate Source Nodes for each element
+        let audioCtx = null, gainNode = null;
+        let videoSource = null, audioSource = null;
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = parseFloat(volumeSlider.value);
+                gainNode.connect(audioCtx.destination);
+            }
+            
+            // Connect only if not already connected
+            if (activeElement === video && !videoSource) {
+                videoSource = audioCtx.createMediaElementSource(video);
+                videoSource.connect(gainNode);
+            } else if (activeElement === audio && !audioSource) {
+                audioSource = audioCtx.createMediaElementSource(audio);
+                audioSource.connect(gainNode);
+            }
+            
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        const handleDrag = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        ['dragenter', 'dragover'].forEach(name => {
+            dropZone.addEventListener(name, (e) => {
+                handleDrag(e);
+                uploadArea.classList.add('drag-over-active');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, (e) => {
+                handleDrag(e);
+                uploadArea.classList.remove('drag-over-active');
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFile(files[0]);
+        });
+
+        document.getElementById('media-upload').onchange = (e) => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        };
+
+        function handleFile(file) {
+            const url = URL.createObjectURL(file);
+            const isAudio = file.type.startsWith('audio/') || 
+                          ['.mp3', '.wav', '.flac'].some(ext => file.name.toLowerCase().endsWith(ext));
+            
+            video.pause();
+            audio.pause();
+            mediaLoaded = false;
+            
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            if (isAudio) {
+                activeElement = audio;
+                audio.src = url;
+                typeBadge.textContent = "Audio: " + file.name;
+                canvas.width = 1280; 
+                canvas.height = 720;
+                document.getElementById('export-format').value = 'flac';
+            } else {
+                activeElement = video;
+                video.src = url;
+                typeBadge.textContent = "Video: " + file.name;
+                document.getElementById('export-format').value = 'mp4';
+            }
+
+            uploadArea.classList.add('hidden');
+            editorUI.classList.remove('hidden');
+            
+            // No need to call initAudioContext here, it happens on first play
+        }
+
+        const onMetadata = () => {
+            endTime = activeElement.duration;
+            seekSlider.max = activeElement.duration;
+            document.getElementById('duration-max-label').textContent = activeElement.duration.toFixed(2) + 's';
+            mediaLoaded = true;
+            initSlider();
+            animationFrameId = requestAnimationFrame(drawLoop);
+        };
+
+        video.onloadedmetadata = onMetadata;
+        audio.onloadedmetadata = onMetadata;
+
+        function applySharpen(ctx, w, h) {
+            const weights = [ 0, -1,  0,
+                             -1,  5, -1,
+                              0, -1,  0 ];
+            const side = 3;
+            const halfSide = 1;
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const src = imageData.data;
+            const output = ctx.createImageData(w, h);
+            const dst = output.data;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const dstOff = (y * w + x) * 4;
+                    let r = 0, g = 0, b = 0;
+                    for (let cy = 0; cy < side; cy++) {
+                        for (let cx = 0; cx < side; cx++) {
+                            const scy = Math.min(h-1, Math.max(0, y + cy - halfSide));
+                            const scx = Math.min(w-1, Math.max(0, x + cx - halfSide));
+                            const srcOff = (scy * w + scx) * 4;
+                            const wt = weights[cy * side + cx];
+                            r += src[srcOff] * wt;
+                            g += src[srcOff + 1] * wt;
+                            b += src[srcOff + 2] * wt;
+                        }
+                    }
+                    dst[dstOff] = Math.min(255, Math.max(0, r));
+                    dst[dstOff + 1] = Math.min(255, Math.max(0, g));
+                    dst[dstOff + 2] = Math.min(255, Math.max(0, b));
+                    dst[dstOff + 3] = 255;
+                }
+            }
+            ctx.putImageData(output, 0, 0);
+        }
+
+        function drawFrame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (activeElement === video && video.readyState >= 2) {
+                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                if (upscaleToggle.checked) {
+                    applySharpen(ctx, canvas.width, canvas.height);
+                }
+            } else {
+                ctx.fillStyle = "#050505";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const barCount = 64;
+                const barWidth = canvas.width / barCount;
+                ctx.fillStyle = upscaleToggle.checked ? "#22d3ee" : "#3b82f6";
+                for(let i=0; i < barCount; i++) {
+                    const noise = Math.sin(i * 0.2 + activeElement.currentTime * 10) * 40;
+                    const h = 100 + noise + (Math.random() * 5);
+                    ctx.fillRect(i * barWidth, (canvas.height/2) - (h/2), barWidth - 2, h);
+                }
+                
+                ctx.fillStyle = "#475569";
+                ctx.font = "bold 24px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText(upscaleToggle.checked ? "ENHANCED ENGINE" : "MASTER MONITOR", canvas.width/2, canvas.height/2 + 150);
+            }
+
+            overlays.forEach(ov => {
+                ctx.fillStyle = "white";
+                ctx.font = `bold ${Math.round(canvas.height/12)}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.strokeStyle = "black";
+                ctx.lineWidth = 4;
+                ctx.strokeText(ov.content, canvas.width/2, canvas.height - 100);
+                ctx.fillText(ov.content, canvas.width/2, canvas.height - 100);
+            });
+        }
+
+        function drawLoop() {
+            if (!mediaLoaded) return;
+            
+            if (!activeElement.paused && activeElement.currentTime >= endTime) {
+                activeElement.currentTime = startTime;
+            }
+            
+            drawFrame();
+            timeDisplay.textContent = `${activeElement.currentTime.toFixed(2)}s / ${activeElement.duration.toFixed(2)}s`;
+            
+            if (!isProcessing) {
+                seekSlider.value = activeElement.currentTime;
+            }
+            
+            animationFrameId = requestAnimationFrame(drawLoop);
+        }
+
+        playBtn.onclick = () => {
+            initAudioContext();
+            if (activeElement.paused) {
+                activeElement.play().catch(console.error);
+                playBtn.textContent = 'Pause';
+            } else {
+                activeElement.pause();
+                playBtn.textContent = 'Play';
+            }
+        };
+
+        upscaleToggle.onchange = () => {
+            upscaleLabel.textContent = upscaleToggle.checked ? "ON" : "OFF";
+            upscaleLabel.className = upscaleToggle.checked ? "text-[11px] font-mono text-cyan-400" : "text-[11px] font-mono text-gray-500";
+        };
+
+        speedSlider.oninput = () => {
+            activeElement.playbackRate = parseFloat(speedSlider.value);
+            speedLabel.textContent = activeElement.playbackRate.toFixed(1) + 'x';
+        };
+
+        seekSlider.oninput = () => {
+            activeElement.currentTime = parseFloat(seekSlider.value);
+        };
+        
+        volumeSlider.oninput = () => {
+            const val = parseFloat(volumeSlider.value);
+            if (gainNode) gainNode.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+            document.getElementById('vol-label').textContent = Math.round(val * 100) + '%';
+        };
+
+        document.getElementById('add-text-btn').onclick = () => {
+            if (textInput.value.trim()) {
+                overlays.push({ content: textInput.value.trim() });
+                textInput.value = '';
+            }
+        };
+
+        document.getElementById('ai-caption-btn').onclick = async () => {
+            const btn = document.getElementById('ai-caption-btn');
+            btn.classList.add('btn-loading');
+            const originalText = btn.textContent;
+            btn.textContent = "Working...";
+            
+            const fetchTitle = async (retries = 3) => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                contents: [{parts: [{text: "Give me one cinematic epic word for a video title. No punctuation."}]}]
+                            })
+                        });
+                        if (!res.ok) throw new Error('API Error');
+                        const json = await res.json();
+                        return json.candidates?.[0]?.content?.parts?.[0]?.text;
+                    } catch (err) {
+                        if (i === retries - 1) throw err;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            };
+
+            try {
+                const suggestion = await fetchTitle();
+                if (suggestion) textInput.value = suggestion.trim().toUpperCase();
+            } catch(e) {
+                textInput.value = "CINEMATIC";
+            } finally {
+                btn.classList.remove('btn-loading');
+                btn.textContent = originalText;
+            }
+        };
+
+        function initSlider() {
+            const slider = document.getElementById('trim-slider');
+            const hStart = document.getElementById('handle-start');
+            const hEnd = document.getElementById('handle-end');
+            const range = document.getElementById('slider-range');
+            let width = slider.offsetWidth;
+            let startPx = 0, endPx = width;
+
+            const update = () => {
+                hStart.style.left = startPx + 'px';
+                hEnd.style.left = (endPx - 20) + 'px';
+                range.style.left = startPx + 'px';
+                range.style.width = (endPx - startPx) + 'px';
+                startTime = (startPx / width) * activeElement.duration;
+                endTime = (endPx / width) * activeElement.duration;
+                document.getElementById('start-label').textContent = startTime.toFixed(3) + 's';
+                document.getElementById('end-label').textContent = endTime.toFixed(3) + 's';
+            };
+
+            const drag = (handle, isStart) => {
+                handle.onmousedown = (e) => {
+                    document.onmousemove = ev => {
+                        let px = ev.clientX - slider.getBoundingClientRect().left;
+                        if (isStart) startPx = Math.max(0, Math.min(px, endPx - 20));
+                        else endPx = Math.min(width, Math.max(px, startPx + 20));
+                        update();
+                    };
+                    document.onmouseup = () => document.onmousemove = null;
+                };
+            };
+            drag(hStart, true);
+            drag(hEnd, false);
+            update();
+        }
+
+        document.getElementById('export-btn').onclick = async () => {
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            const btn = document.getElementById('export-btn');
+            const originalBtnText = btn.textContent;
+            const format = document.getElementById('export-format').value;
+            const quality = document.getElementById('export-quality').value;
+
+            btn.textContent = "PREPARING...";
+            activeElement.pause();
+            activeElement.currentTime = startTime;
+
+            const stream = canvas.captureStream(30); 
+            
+            if (activeElement.captureStream) {
+                const aStream = activeElement.captureStream();
+                const aTrack = aStream.getAudioTracks()[0];
+                if (aTrack) stream.addTrack(aTrack);
+            } else if (activeElement.mozCaptureStream) {
+                const aStream = activeElement.mozCaptureStream();
+                const aTrack = aStream.getAudioTracks()[0];
+                if (aTrack) stream.addTrack(aTrack);
+            }
+
+            let bitrate = quality === 'lossless' ? 50000000 : (quality === 'balanced' ? 10000000 : 2500000);
+            const isAudioOnly = ['flac', 'wav', 'mp3'].includes(format);
+            const mimeType = isAudioOnly ? 'audio/webm' : 'video/webm;codecs=vp9,opus';
+
+            const recorder = new MediaRecorder(stream, { 
+                mimeType: MediaRecorder.isTypeSupported(mimeType) ? mimeType : 'video/webm',
+                videoBitsPerSecond: isAudioOnly ? 0 : bitrate
+            });
+            
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: recorder.mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `studio-master-${Date.now()}.${format}`;
+                a.click();
+                
+                btn.textContent = originalBtnText;
+                isProcessing = false;
+                activeElement.currentTime = startTime;
+            };
+
+            setTimeout(() => {
+                recorder.start();
+                activeElement.play();
+                btn.textContent = "RECORDING...";
+
+                const checkEnd = setInterval(() => {
+                    if (activeElement.currentTime >= endTime || activeElement.ended) {
+                        clearInterval(checkEnd);
+                        recorder.stop();
+                        activeElement.pause();
+                    }
+                }, 100);
+            }, 500);
+        };
+    </script>
+</body>
+</html>
