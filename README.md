@@ -4,6 +4,7 @@ A simple basic video editor and audio trimmer. It supports common formats like M
 
 🚀 How to use it
 
+  - Launch App: https://trs120.github.io/ZenStudio/
   - Drop video or Audio file
   - Edit
   - Save
