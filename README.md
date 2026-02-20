@@ -8,6 +8,3 @@ A simple basic video editor and audio trimmer. It supports common formats like M
   - Drop video or Audio file
   - Edit
   - Save
-
-Note: I made this tool for my personal use because I wanted a simple way to crop files without opening heavy editing software. I'm sharing it here in case anyone else finds it helpful!
-—This project was created with the assistance of AI.
